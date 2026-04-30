@@ -1,10 +1,10 @@
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import React, { useMemo } from 'react';
-import { useAppContext } from '../AppContext';
+import { usePunchesContext } from '../providers/PunchProvider';
 import { formatMinutes, calculateWorkedMs, toDateKey } from '../utils';
 
 export function Reports() {
-  const { expectedMinutes, punches } = useAppContext();
+  const { expectedMinutes, punches } = usePunchesContext();
 
   const balanceMins = useMemo(() => {
     const groupsByDay: Record<string, typeof punches> = {};

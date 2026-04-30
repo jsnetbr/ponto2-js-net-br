@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase';
-import { ProfileSchema, UserSettingsSchema, PunchSchema, type Profile, type UserSettings, type PunchSupabase } from '../schemas';
+import { ProfileSchema, UserSettingsSchema, PunchSchema, type UserSettings } from '../schemas';
 
 // Hook para perfil do usuário
 export const useProfile = (userId: string) => {
@@ -119,23 +119,22 @@ export const useUpdateUserSettings = () => {
 // Mutation para atualizar punch
 export const useUpdatePunch = () => {
   const queryClient = useQueryClient();
-  const { user } = useAppContext();
   
   return useMutation({
-    mutationFn: async (punchData: { id: string; timestamp: string }) => {
+    mutationFn: async (punchData: { userId: string; id: string; timestamp: string }) => {
       const { data, error } = await supabase
-        .from<Punch>('punches')
+        .from('punches')
         .update({ timestamp: punchData.timestamp })
         .eq('id', punchData.id)
-        .eq('user_id', user?.id)
+        .eq('user_id', punchData.userId)
         .select()
         .single();
       
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['punches', user?.id] });
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['punches', variables.userId] });
     },
     onError: (error) => {
       console.error('Erro ao atualizar punch:', error);
@@ -147,21 +146,20 @@ export const useUpdatePunch = () => {
 // Mutation para excluir punch
 export const useDeletePunch = () => {
   const queryClient = useQueryClient();
-  const { user } = useAppContext();
   
   return useMutation({
-    mutationFn: async (punchId: string) => {
+    mutationFn: async ({ userId, punchId }: { userId: string; punchId: string }) => {
       const { error } = await supabase
-        .from<Punch>('punches')
+        .from('punches')
         .delete()
         .eq('id', punchId)
-        .eq('user_id', user?.id);
+        .eq('user_id', userId);
       
       if (error) throw error;
       return punchId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['punches', user?.id] });
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['punches', variables.userId] });
     },
     onError: (error) => {
       console.error('Erro ao excluir punch:', error);

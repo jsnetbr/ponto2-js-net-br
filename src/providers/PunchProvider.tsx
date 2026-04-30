@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { QueryClient, QueryProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { sortPunches, toDateKey, validateEditedPunchTime } from '../utils';
 import { useProfile, useUserSettings, usePunches, useAddPunch, useUpdateUserSettings, useCurrentPunch, useUpdatePunch, useDeletePunch } from '../hooks/useSupabase';
 import { useAuth } from './AuthProvider';
@@ -60,7 +60,7 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
     },
   }), []);
 
-  const profileQuery = useProfile(user?.id ?? '');
+  useProfile(user?.id ?? '');
   const settingsQuery = useUserSettings(user?.id ?? '');
   const punchesQuery = usePunches(user?.id ?? '');
   const currentPunchData = useCurrentPunch(user?.id ?? '');
@@ -74,9 +74,11 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
   const lunchMinutes = settingsQuery.data?.lunch_minutes ?? DEFAULT_LUNCH_MINUTES;
   const isWorking = currentPunchData.isWorking;
   const todayPunches = punchesQuery.data?.filter(p => toDateKey(new Date(p.timestamp)) === toDateKey(new Date())) ?? [];
-  const workedMinutes = Math.floor(calculateWorkedMs(todayPunches.map(p => ({ 
-    timestamp: new Date(p.timestamp), 
-    pending: p.pending 
+  const workedMinutes = Math.floor(calculateWorkedMs(todayPunches.map(p => ({
+    id: p.id,
+    timestamp: new Date(p.timestamp),
+    type: p.type,
+    pending: p.pending,
   })), Date.now()) / 60000);
   const balanceMinutes = workedMinutes - expectedMinutes;
   const remainingMinutes = Math.max(expectedMinutes - workedMinutes, 0);
@@ -89,7 +91,8 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     const now = timestampOverride ?? new Date();
     const todayPunchesForCheck = punchesQuery.data?.filter(p => toDateKey(new Date(p.timestamp)) === toDateKey(now)) ?? [];
-    if (todayPunchesForCheck.length > 0 && Date.now() - todayPunchesForCheck[todayPunchesForCheck.length - 1].timestamp.getTime() < 15000) {
+    const lastTimestamp = todayPunchesForCheck.length > 0 ? new Date(todayPunchesForCheck[todayPunchesForCheck.length - 1].timestamp).getTime() : 0;
+    if (todayPunchesForCheck.length > 0 && Date.now() - lastTimestamp < 15000) {
       toast('Aguarde alguns segundos antes de registrar novamente.', 'error');
       return false;
     }
@@ -127,13 +130,17 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
 
   const updatePunch = async (id: string, newTimestamp: Date): Promise<boolean> => {
     if (!user) return false;
-    const validationMessage = validateEditedPunchTime(punchesQuery.data ?? [], id, newTimestamp);
+    const validationMessage = validateEditedPunchTime(
+      (punchesQuery.data ?? []).map((p) => ({ id: p.id, timestamp: new Date(p.timestamp), type: p.type, pending: p.pending })),
+      id,
+      newTimestamp,
+    );
     if (validationMessage) {
       toast(validationMessage, 'error');
       return false;
     }
     try {
-      await updatePunchMutation({ id, timestamp: newTimestamp.toISOString() });
+      await updatePunchMutation({ userId: user.id, id, timestamp: newTimestamp.toISOString() });
       return true;
     } catch (error) {
       toast(toUserMessage(error, 'Erro ao atualizar ponto.'), 'error');
@@ -149,7 +156,7 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
     try {
-      await deletePunchMutation(id);
+      await deletePunchMutation({ userId: user.id, punchId: id });
       return true;
     } catch (error) {
       toast(toUserMessage(error, 'Erro ao excluir ponto.'), 'error');
@@ -195,7 +202,7 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <QueryProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
       <PunchContext.Provider value={{ 
         punches: punchesQuery.data?.map(p => ({ id: p.id, timestamp: new Date(p.timestamp), type: p.type, pending: p.pending })) ?? [],
         isWorking, workedMinutes, expectedMinutes, balanceMinutes, remainingMinutes, pendingLunchMinutes, predictedExitStr,
@@ -203,7 +210,7 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
       }}>
         {children}
       </PunchContext.Provider>
-    </QueryProvider>
+    </QueryClientProvider>
   );
 }
 

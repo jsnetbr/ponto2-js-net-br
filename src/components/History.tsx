@@ -95,7 +95,7 @@ export function History() {
       if (dateKey === todayKey) dateLabel = `HOJE, ${dateLabel}`;
       else if (dateKey === yesterdayKey) dateLabel = `ONTEM, ${dateLabel}`;
 
-      const uiPunches = [];
+      const uiPunches: Array<{ id: string | null; dateObj: Date | null; displayStr: string; type: 'in' | 'out' | 'lunch_start' | 'lunch_end' | null }> = [];
       const padTo = Math.max(4, dayPunches.length + (dayPunches.length % 2 !== 0 ? 1 : 0));
 
       for (let j = 0; j < padTo; j += 1) {
@@ -104,9 +104,10 @@ export function History() {
             id: dayPunches[j].id,
             dateObj: dayPunches[j].timestamp,
             displayStr: dayPunches[j].timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            type: dayPunches[j].type,
           });
         } else {
-          uiPunches.push({ id: null, dateObj: null, displayStr: '--:--' });
+          uiPunches.push({ id: null, dateObj: null, displayStr: '--:--', type: null });
         }
       }
 
@@ -265,15 +266,13 @@ export function History() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
                 {day.punches.map((p, j) => {
-                  const isEntrance = j % 2 === 0;
-                  const index = Math.floor(j / 2) + 1;
-                       const label = (() => {
-                         if (p.type === 'in') return 'Entrada';
-                         if (p.type === 'lunch_start') return 'Ida intervalo';
-                         if (p.type === 'lunch_end') return 'Volta intervalo';
-                         if (p.type === 'out') return 'Saida';
-                         return 'Registro';
-                       })();
+                  const label = (() => {
+                    if (p.type === 'in') return 'Entrada';
+                    if (p.type === 'lunch_start') return 'Ida intervalo';
+                    if (p.type === 'lunch_end') return 'Volta intervalo';
+                    if (p.type === 'out') return 'Saida';
+                    return 'Registro';
+                  })();
 
                   return (
                     <div key={j} className="rounded-md border border-outline-variant/50 bg-surface p-1">
@@ -288,8 +287,7 @@ export function History() {
             </div>
           ))}
         </div>
-        )}
-      </div>
+      )}
 
       <ConfirmDialog 
         isOpen={isDeleteConfirmOpen} 
@@ -301,8 +299,8 @@ export function History() {
         variant="danger" 
       />
 
-     {editingPunch && (
-       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      {editingPunch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="glass-panel w-full max-w-sm rounded-2xl p-6 relative shadow-2xl animate-in zoom-in-95 duration-200">
             <button onClick={() => setEditingPunch(null)} className="absolute top-4 right-4 text-outline hover:text-on-surface transition-colors">
               <X size={20} />
@@ -313,9 +311,9 @@ export function History() {
             <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} className="w-full bg-surface-variant/50 border border-outline-variant text-on-surface text-headline-md font-semibold rounded-xl h-16 px-4 mb-8 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-center file:hidden" />
 
             <div className="flex justify-between items-center gap-3">
-               <button onClick={handleRequestDelete} className="flex items-center justify-center gap-2 px-4 py-3 bg-error-container text-error rounded-xl hover:bg-error/20 transition-colors font-semibold">
-                 <Trash2 size={20} />
-               </button>
+              <button onClick={handleRequestDelete} className="flex items-center justify-center gap-2 px-4 py-3 bg-error-container text-error rounded-xl hover:bg-error/20 transition-colors font-semibold">
+                <Trash2 size={20} />
+              </button>
               <button onClick={handleSaveEdit} disabled={Boolean(editValidationMessage)} className="flex-1 bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors">
                 SALVAR
               </button>

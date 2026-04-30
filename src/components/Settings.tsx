@@ -1,9 +1,9 @@
-import { Clock, LogOut, User, Shield } from 'lucide-react';
+﻿import { Clock, LogOut, Shield, User } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../providers/AuthProvider';
-import { usePunchesContext } from '../providers/PunchProvider';
 import { useToast } from '../ToastContext';
 import { useUserSettings } from '../hooks/useSupabase';
+import { useAuth } from '../providers/AuthProvider';
+import { usePunchesContext } from '../providers/PunchProvider';
 import { supabase } from '../utils/supabase';
 
 export function Settings() {
@@ -27,6 +27,10 @@ export function Settings() {
   }, [expectedMinutes]);
 
   useEffect(() => {
+    setLunchMins(settings?.lunch_minutes ?? 60);
+  }, [settings?.lunch_minutes]);
+
+  useEffect(() => {
     if (!user) return;
     setEmailInput(user.email ?? '');
     void (async () => {
@@ -36,7 +40,11 @@ export function Settings() {
   }, [user]);
 
   const handleSaveWorkday = () => {
-    updateExpectedMinutes((localHours * 60) + localMins);
+    const safeHours = Math.max(0, Math.min(24, localHours));
+    const safeMinutes = Math.max(0, Math.min(59, localMins));
+    setLocalHours(safeHours);
+    setLocalMins(safeMinutes);
+    updateExpectedMinutes((safeHours * 60) + safeMinutes);
   };
 
   const handleSaveDisplayName = async () => {
@@ -76,7 +84,7 @@ export function Settings() {
       toast('As senhas nao conferem.', 'error');
       return;
     }
-    
+
     setSaving(true);
     const { error } = await supabase.auth.updateUser({ password: passwordInput });
     setSaving(false);
@@ -91,12 +99,12 @@ export function Settings() {
 
   return (
     <div className="pt-12 md:pt-32 pb-32 px-6 max-w-3xl mx-auto flex flex-col gap-6 relative z-10 w-full mb-32">
-       <div className="mb-2">
-         <h2 className="text-display-lg text-on-surface">Ajustes</h2>
-         <p className="text-body-md text-on-surface-variant mt-2">Perfil, seguranca e aparencia.</p>
-       </div>
-       
-       <section className="glass-panel rounded-xl overflow-hidden flex flex-col">
+      <div className="mb-2">
+        <h2 className="text-display-lg text-on-surface">Ajustes</h2>
+        <p className="text-body-md text-on-surface-variant mt-2">Perfil, seguranca e aparencia.</p>
+      </div>
+
+      <section className="glass-panel rounded-xl overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-outline-variant bg-surface-variant/30">
           <h3 className="text-headline-md text-on-surface flex items-center gap-2">
             <User className="text-primary w-6 h-6" />
@@ -169,33 +177,30 @@ export function Settings() {
               <label className="text-label-sm text-on-surface block mb-1">JORNADA DIARIA PREVISTA</label>
               <span className="text-body-md text-on-surface-variant text-sm">Defina quanto tempo voce deve trabalhar por dia.</span>
             </div>
-           <div className="flex items-center gap-2">
-             <div className="relative w-24">
-               <input type="number" min="0" max="24" value={localHours} onChange={(e) => setLocalHours(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-6 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
-               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">h</span>
-             </div>
-             <span className="text-surface-variant-on font-bold">:</span>
-             <div className="relative w-24">
-               <input type="number" min="0" max="59" value={localMins.toString().padStart(2, '0')} onChange={(e) => setLocalMins(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-7 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
-               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">m</span>
-             </div>
-           </div>
-         </div>
-       </div>
-       <div className="flex flex-col gap-4 mt-4">
-         <div className="flex items-center justify-between gap-4">
-           <div>
-             <label className="text-label-sm text-on-surface block mb-1">INTERVALO DE ALMOÇO</label>
-             <span className="text-body-sm text-on-surface-variant">Tempo previsto para pausa.</span>
-           </div>
-           <div className="relative w-32">
-             <input type="number" min="0" max="1440" value={lunchMins} onChange={(e) => setLunchMins(parseInt(e.target.value, 10) || 0)} onBlur={() => updateLunchMinutes(lunchMins)} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-8 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
-             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">min</span>
-           </div>
-         </div>
-       </div>
-     </div>
-   </section>
+            <div className="flex items-center gap-2">
+              <div className="relative w-24">
+                <input type="number" min="0" max="24" value={localHours} onChange={(e) => setLocalHours(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-6 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">h</span>
+              </div>
+              <span className="text-surface-variant-on font-bold">:</span>
+              <div className="relative w-24">
+                <input type="number" min="0" max="59" value={localMins.toString().padStart(2, '0')} onChange={(e) => setLocalMins(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-7 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">m</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <label className="text-label-sm text-on-surface block mb-1">INTERVALO DE ALMOCO</label>
+              <span className="text-body-sm text-on-surface-variant">Tempo previsto para pausa.</span>
+            </div>
+            <div className="relative w-32">
+              <input type="number" min="0" max="1440" value={lunchMins} onChange={(e) => setLunchMins(parseInt(e.target.value, 10) || 0)} onBlur={() => updateLunchMinutes(lunchMins)} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-8 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">min</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="glass-panel rounded-xl overflow-hidden flex flex-col p-4">

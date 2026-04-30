@@ -1,11 +1,11 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Navigation } from './components/Navigation';
-import { useAuth } from './providers/AuthProvider';
-import { usePunchesContext } from './providers/PunchProvider';
-import { useSync } from './providers/SyncProvider';
-import { ToastProvider } from './ToastContext';
 import { AppIcon } from './components/AppIcon';
+import { ToastProvider } from './ToastContext';
+import { AuthProvider, useAuth } from './providers/AuthProvider';
+import { PunchProvider, usePunchesContext } from './providers/PunchProvider';
+import { SyncProvider, useSync } from './providers/SyncProvider';
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })));
 const History = lazy(() => import('./components/History').then((module) => ({ default: module.History })));

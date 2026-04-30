@@ -28,7 +28,7 @@ export function Dashboard() {
   
   const buttonLabel = isSavingPunch ? 'SALVANDO...' : (isWorking ? 'REGISTRAR SAÍDA' : 'BATER PONTO');
 
-  const getPunchLabel = (punch: { type: string }) => {
+  const getPunchLabel = (punch: { type?: string }) => {
     switch (punch.type) {
       case 'in': return 'Entrada';
       case 'lunch_start': return 'Ida intervalo';
