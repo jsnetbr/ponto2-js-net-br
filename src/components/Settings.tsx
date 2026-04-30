@@ -51,7 +51,10 @@ export function Settings() {
     if (!user) return;
     setSaving(true);
     const trimmed = displayName.trim();
-    const { error } = await supabase.from('profiles').upsert({ id: user.id, email: user.email ?? '', display_name: trimmed || null });
+    const { error } = await supabase
+      .from('profiles')
+      .update({ display_name: trimmed || null })
+      .eq('id', user.id);
     setSaving(false);
     if (error) {
       toast(`Erro ao salvar nome: ${error.message}`, 'error');

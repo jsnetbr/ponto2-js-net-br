@@ -1,21 +1,30 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigation } from './components/Navigation';
 import { AppIcon } from './components/AppIcon';
 import { ToastProvider } from './ToastContext';
 import { AuthProvider, useAuth } from './providers/AuthProvider';
-import { PunchProvider, usePunchesContext } from './providers/PunchProvider';
+import { PunchProvider } from './providers/PunchProvider';
 import { SyncProvider, useSync } from './providers/SyncProvider';
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })));
 const History = lazy(() => import('./components/History').then((module) => ({ default: module.History })));
 const Settings = lazy(() => import('./components/Settings').then((module) => ({ default: module.Settings })));
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { user, loadingAuth, signIn, signUp } = useAuth();
   const { isOnline, pendingPunchCount } = useSync();
-  const { } = usePunchesContext(); // Not used here but available
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -103,14 +112,16 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <SyncProvider>
-          <PunchProvider>
-            <AppContent />
-          </PunchProvider>
-        </SyncProvider>
-      </AuthProvider>
-    </ToastProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <AuthProvider>
+          <SyncProvider>
+            <PunchProvider>
+              <AppContent />
+            </PunchProvider>
+          </SyncProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }

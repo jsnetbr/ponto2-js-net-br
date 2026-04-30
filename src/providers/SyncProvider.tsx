@@ -83,7 +83,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           type: item.type,
         }));
 
-        const { error } = await supabase.from('punches').insert(payload);
+        const { error } = await supabase
+          .from('punches')
+          .upsert(payload, { onConflict: 'user_id,timestamp,type', ignoreDuplicates: true });
         
         if (error) throw error;
 

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useMemo } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React, { createContext, useContext } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { sortPunches, toDateKey, validateEditedPunchTime } from '../utils';
 import { useProfile, useUserSettings, usePunches, useAddPunch, useUpdateUserSettings, useCurrentPunch, useUpdatePunch, useDeletePunch } from '../hooks/useSupabase';
 import { useAuth } from './AuthProvider';
@@ -45,27 +45,28 @@ const toUserMessage = (error: unknown, fallback: string): string => {
   return `${fallback} (${error.message})`;
 };
 
+const isDuplicateConflictError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const maybe = error as { code?: string; message?: string; details?: string };
+  return (
+    maybe.code === '23505' ||
+    maybe.message?.toLowerCase().includes('duplicate key') === true ||
+    maybe.details?.toLowerCase().includes('already exists') === true
+  );
+};
+
 export function PunchProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { isOnline, addPendingPunch, removePendingPunch } = useSync();
-  
-  const queryClient = useMemo(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 1000 * 60,
-        refetchOnWindowFocus: false,
-        retry: 1,
-      },
-    },
-  }), []);
+  const { isOnline, isSavingPunch: isSavingSync, addPendingPunch, removePendingPunch } = useSync();
+  const queryClient = useQueryClient();
 
-  useProfile(user?.id ?? '');
+  useProfile(user?.id ?? '', user?.email ?? '');
   const settingsQuery = useUserSettings(user?.id ?? '');
   const punchesQuery = usePunches(user?.id ?? '');
   const currentPunchData = useCurrentPunch(user?.id ?? '');
   
-  const { mutateAsync: addPunchMutation } = useAddPunch();
+  const { mutateAsync: addPunchMutation, isPending: isSavingMutation } = useAddPunch();
   const { mutateAsync: updateSettingsMutation } = useUpdateUserSettings();
   const { mutateAsync: updatePunchMutation } = useUpdatePunch();
   const { mutateAsync: deletePunchMutation } = useDeletePunch();
@@ -123,6 +124,10 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
       await addPunchMutation({ userId: user.id, punchData: { timestamp: now.toISOString(), type } });
       return true;
     } catch (error) {
+      if (isDuplicateConflictError(error)) {
+        toast('Esse ponto ja foi registrado nesse horario. Aguarde alguns segundos e tente novamente.', 'info');
+        return false;
+      }
       toast(toUserMessage(error, 'Erro ao registrar ponto.'), 'error');
       return false;
     }
@@ -201,16 +206,16 @@ export function PunchProvider({ children }: { children: React.ReactNode }) {
     ]);
   };
 
+  const isSavingPunch = isSavingMutation || isSavingSync;
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <PunchContext.Provider value={{ 
-        punches: punchesQuery.data?.map(p => ({ id: p.id, timestamp: new Date(p.timestamp), type: p.type, pending: p.pending })) ?? [],
-        isWorking, workedMinutes, expectedMinutes, balanceMinutes, remainingMinutes, pendingLunchMinutes, predictedExitStr,
-        addPunch, updatePunch, deletePunch, isSavingPunch: false, updateExpectedMinutes, updateLunchMinutes, refreshData
-      }}>
-        {children}
-      </PunchContext.Provider>
-    </QueryClientProvider>
+    <PunchContext.Provider value={{ 
+      punches: punchesQuery.data?.map(p => ({ id: p.id, timestamp: new Date(p.timestamp), type: p.type, pending: p.pending })) ?? [],
+      isWorking, workedMinutes, expectedMinutes, balanceMinutes, remainingMinutes, pendingLunchMinutes, predictedExitStr,
+      addPunch, updatePunch, deletePunch, isSavingPunch, updateExpectedMinutes, updateLunchMinutes, refreshData
+    }}>
+      {children}
+    </PunchContext.Provider>
   );
 }
 
