@@ -6,12 +6,13 @@ import { AppIcon } from './components/AppIcon';
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })));
 const History = lazy(() => import('./components/History').then((module) => ({ default: module.History })));
-const Reports = lazy(() => import('./components/Reports').then((module) => ({ default: module.Reports })));
 const Settings = lazy(() => import('./components/Settings').then((module) => ({ default: module.Settings })));
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { user, loadingAuth, signIn, error } = useAppContext();
+  const { user, loadingAuth, signIn, signUp, error } = useAppContext();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   if (loadingAuth) {
     return (
@@ -36,12 +37,16 @@ function AppContent() {
             {error}
           </div>
         )}
-        <button 
-          onClick={signIn}
-          className="bg-primary text-white font-bold tracking-wider px-8 py-4 rounded-full w-full max-w-sm hover:bg-primary-container hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl cursor-pointer"
-        >
-          ENTRAR COM GOOGLE
-        </button>
+        <div className="w-full max-w-sm flex flex-col gap-3">
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="seu@email.com" className="w-full rounded-xl border border-outline-variant bg-surface px-4 py-3 text-on-surface" />
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Sua senha" className="w-full rounded-xl border border-outline-variant bg-surface px-4 py-3 text-on-surface" />
+          <button onClick={() => signIn(email, password)} className="bg-primary text-white font-bold tracking-wider px-8 py-4 rounded-full w-full hover:bg-primary-container hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl cursor-pointer">
+            ENTRAR
+          </button>
+          <button onClick={() => signUp(email, password)} className="bg-surface-variant text-on-surface font-bold tracking-wider px-8 py-4 rounded-full w-full hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer">
+            CRIAR CONTA
+          </button>
+        </div>
       </div>
     );
   }
@@ -52,8 +57,6 @@ function AppContent() {
         return <Dashboard />;
       case 'history':
         return <History />;
-      case 'reports':
-        return <Reports />;
       case 'settings':
         return <Settings />;
       default:

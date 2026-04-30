@@ -32,5 +32,3 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Firestore rules tests
-        run: npm run test:rules

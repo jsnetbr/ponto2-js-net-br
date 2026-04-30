@@ -18,14 +18,14 @@
    - Benefício: menos erro e menos retrabalho do usuário.
 
 4. **Observabilidade de erros (Sentry/LogRocket)**
-   - Melhoria: instrumentar erros de runtime, falhas Firebase e eventos críticos (login, punch, edição, exclusão).
+   - Melhoria: instrumentar erros de runtime, falhas Supabase e eventos críticos (login, punch, edição, exclusão).
    - Benefício: diagnóstico rápido de bugs em produção.
 
 ## Prioridade média
 
 5. **Testes E2E do fluxo principal**
    - Cenários: login, bater entrada/saída, editar ponto, exportar CSV.
-   - Sugestão: Playwright com mocks do Firebase Emulator.
+   - Sugestão: Playwright com mocks do ambiente de teste Supabase.
 
 6. **Acessibilidade (A11y)**
    - Melhorias: foco visível consistente, labels/aria para ícones-botão, navegação por teclado no modal.

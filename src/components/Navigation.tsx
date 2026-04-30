@@ -1,4 +1,4 @@
-import { CalendarDays, LineChart, Settings2, Fingerprint } from 'lucide-react';
+import { CalendarDays, Settings2, Fingerprint } from 'lucide-react';
 import React from 'react';
 import { AppIcon } from './AppIcon';
 
@@ -11,7 +11,6 @@ export function Navigation({ activeTab, setActiveTab }: NavigationProps) {
   const tabs = [
     { id: 'dashboard', label: 'Ponto', icon: Fingerprint },
     { id: 'history', label: 'Histórico', icon: CalendarDays },
-    { id: 'reports', label: 'Relatórios', icon: LineChart },
     { id: 'settings', label: 'Ajustes', icon: Settings2 },
   ];
 
@@ -58,3 +57,5 @@ export function Navigation({ activeTab, setActiveTab }: NavigationProps) {
     </>
   );
 }
+
+

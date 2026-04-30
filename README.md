@@ -1,81 +1,37 @@
 # ponto.js.net.br
 
-Aplicativo web de controle de ponto com React + Firebase (Auth Google + Firestore).
+Aplicativo web de controle de ponto com React + Supabase (email/senha).
 
 ## Requisitos
 
 - Node.js 20+
-- Projeto Firebase configurado (Auth Google habilitado + Firestore)
-- Firebase CLI autenticado (`firebase login`)
+- Projeto Supabase criado
+
+## Configuracao
+
+1. Copie `.env.example` para `.env`.
+2. Preencha:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+
+## Banco Supabase
+
+1. Execute `supabase/migrations/001_init_ponto_schema.sql` no SQL Editor do Supabase.
+2. Confirme RLS ativo para `profiles`, `user_settings` e `punches`.
 
 ## Executar localmente
 
-1. Instalar dependências:
-   ```bash
-   npm install
-   ```
-2. Iniciar app:
-   ```bash
-   npm run dev
-   ```
-3. Abrir no navegador:
-   - `http://localhost:3000`
+```bash
+npm install
+npm run dev
+```
 
-## Verificação de qualidade
+Abrir: `http://localhost:3000`
 
-- Checagem de tipos da aplicação:
-  ```bash
-  npm run typecheck
-  ```
-- Testes unitários utilitários:
-  ```bash
-  npm run test:unit
-  ```
-- Testes de regras do Firestore (com emulador):
-  ```bash
-  npm run test:rules
-  ```
-- Build de produção:
-  ```bash
-  npm run build
-  ```
-- Pipeline local completo:
-  ```bash
-  npm test
-  ```
+## Validacao
 
-## Critérios para considerar o projeto “sólido”
-
-- `npm run lint` sem erros.
-- `npm run test:unit` com 100% de sucesso.
-- `npm run build` concluído.
-- `npm run test:rules` concluído com emulador Firestore.
-- CI no GitHub Actions (`.github/workflows/ci.yml`) verde em `push`/`pull_request`.
-
-## Deploy de regras e índices Firestore
-
-1. Confirmar projeto no arquivo `.firebaserc`.
-2. Publicar regras e índices:
-   ```bash
-   firebase deploy --only firestore:rules,firestore:indexes
-   ```
-
-## Estrutura de dados Firestore
-
-- `users/{userId}`
-  - `email` (string)
-  - `createdAt` (timestamp)
-- `userSettings/{userId}`
-  - `userId` (string)
-  - `expectedMinutes` (int entre 1 e 1440)
-  - `requireLocation` (boolean)
-  - `updatedAt` (timestamp)
-- `users/{userId}/punches/{punchId}`
-  - `userId` (string)
-  - `timestamp` (timestamp)
-  - `type` (`in` ou `out`)
-
-
-## Próximos passos
-
-- Veja o roadmap técnico em `MELHORIAS.md` para evoluir robustez, testes, performance e operação.
+```bash
+npm run lint
+npm run test:unit
+npm run build
+```

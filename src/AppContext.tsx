@@ -1,27 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import {
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut,
-  type User,
-} from 'firebase/auth';
-import { FirebaseError } from 'firebase/app';
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
-import { auth, db } from './firebase';
+import type { User } from '@supabase/supabase-js';
 import { sortPunches, toDateKey, validateEditedPunchTime } from './utils';
+import { supabase } from './utils/supabase';
 
 export interface Punch {
   id: string;
@@ -32,10 +12,11 @@ export interface Punch {
 interface AppContextType {
   user: User | null;
   loadingAuth: boolean;
-  signIn: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   logOut: () => Promise<void>;
   punches: Punch[];
-  addPunch: () => Promise<boolean>;
+  addPunch: (timestampOverride?: Date) => Promise<boolean>;
   updatePunch: (id: string, newTimestamp: Date) => Promise<boolean>;
   deletePunch: (id: string) => Promise<boolean>;
   isSavingPunch: boolean;
@@ -46,41 +27,20 @@ interface AppContextType {
   error: string | null;
 }
 
-const DEFAULT_EXPECTED_MINUTES = 528; // 8h48m
+const DEFAULT_EXPECTED_MINUTES = 528;
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const toUserMessage = (error: unknown, fallback: string): string => {
-  if (!(error instanceof FirebaseError)) {
-    return fallback;
-  }
-
-  switch (error.code) {
-    case 'permission-denied':
-      return 'Sem permissão para esta ação. Verifique o login e as regras.';
-    case 'resource-exhausted':
-      return 'Cota diária do banco excedida.';
-    case 'unavailable':
-      return 'Serviço indisponível no momento. Tente novamente.';
-    case 'auth/popup-closed-by-user':
-      return 'Login cancelado antes de concluir.';
-    case 'auth/popup-blocked':
-      return 'Popup de login bloqueado pelo navegador.';
-    default:
-      return `${fallback} (${error.code})`;
-  }
+  if (!(error instanceof Error)) return fallback;
+  if (error.message.includes('Invalid login credentials')) return 'Email ou senha invalidos.';
+  if (error.message.includes('Email not confirmed')) return 'Confirme seu email antes de entrar.';
+  return `${fallback} (${error.message})`;
 };
 
 const normalizeExpectedMinutes = (value: unknown): number | null => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return null;
-  }
-
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   const normalized = Math.round(value);
-  if (normalized < 1 || normalized > 1440) {
-    return null;
-  }
-
-  return normalized;
+  return normalized < 1 || normalized > 1440 ? null : normalized;
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -91,354 +51,203 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [isSavingPunch, setIsSavingPunch] = useState(false);
   const [pendingPunchCount, setPendingPunchCount] = useState(0);
-  const [isOnline, setIsOnline] = useState(() => (
-    typeof navigator === 'undefined' ? true : navigator.onLine
-  ));
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
 
   const getQueueStorageKey = (uid: string) => `pontojs:pendingPunches:${uid}`;
-
   const readPendingQueue = (uid: string): number => {
-    if (typeof window === 'undefined') return 0;
     try {
-      const raw = window.localStorage.getItem(getQueueStorageKey(uid));
-      const parsed = Number(raw ?? '0');
+      const parsed = Number(window.localStorage.getItem(getQueueStorageKey(uid)) ?? '0');
       return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
     } catch {
       return 0;
     }
   };
-
   const writePendingQueue = (uid: string, value: number) => {
-    if (typeof window === 'undefined') return;
     const normalized = Math.max(0, Math.floor(value));
-    if (normalized === 0) {
-      window.localStorage.removeItem(getQueueStorageKey(uid));
-      return;
-    }
-    window.localStorage.setItem(getQueueStorageKey(uid), String(normalized));
+    if (normalized === 0) window.localStorage.removeItem(getQueueStorageKey(uid));
+    else window.localStorage.setItem(getQueueStorageKey(uid), String(normalized));
   };
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
     };
   }, []);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (nextUser) => {
-      try {
-        if (!nextUser) {
-          setUser(null);
-          setPunches([]);
-          return;
-        }
-
-        if (!nextUser.emailVerified) {
-          setUser(null);
-          setPunches([]);
-          setError('Sua conta Google precisa ter e-mail verificado.');
-          await signOut(auth);
-          return;
-        }
-
-        if (!nextUser.email) {
-          setUser(null);
-          setPunches([]);
-          setError('Não foi possível obter o e-mail da conta Google.');
-          await signOut(auth);
-          return;
-        }
-
-        setError(null);
-        setUser(nextUser);
-        setPendingPunchCount(readPendingQueue(nextUser.uid));
-
-        const userRef = doc(db, 'users', nextUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            email: nextUser.email,
-            createdAt: serverTimestamp(),
-          });
-        }
-
-        const settingsRef = doc(db, 'userSettings', nextUser.uid);
-        const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) {
-          await setDoc(settingsRef, {
-            userId: nextUser.uid,
-            expectedMinutes: DEFAULT_EXPECTED_MINUTES,
-            requireLocation: true,
-            updatedAt: serverTimestamp(),
-          });
-          setExpectedMinutes(DEFAULT_EXPECTED_MINUTES);
-          return;
-        }
-
-        const settingsData = settingsSnap.data();
-        const normalizedExpected = normalizeExpectedMinutes(settingsData.expectedMinutes);
-        if (normalizedExpected == null) {
-          await updateDoc(settingsRef, {
-            expectedMinutes: DEFAULT_EXPECTED_MINUTES,
-            updatedAt: serverTimestamp(),
-          });
-          setExpectedMinutes(DEFAULT_EXPECTED_MINUTES);
-        } else {
-          setExpectedMinutes(normalizedExpected);
-        }
-      } catch (authSetupError) {
-        console.error('Failed during auth bootstrap', authSetupError);
-        setError(toUserMessage(authSetupError, 'Falha ao carregar sua conta.'));
-      } finally {
-        setLoadingAuth(false);
-      }
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      setUser(data.session?.user ?? null);
+      setLoadingAuth(false);
+    })();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoadingAuth(false);
     });
-
-    return unsub;
+    return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    setPendingPunchCount(readPendingQueue(user.id));
+    void (async () => {
+      const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
+      if (!profile) await supabase.from('profiles').upsert({ id: user.id, email: user.email ?? '' });
+
+      const { data: settings } = await supabase.from('user_settings').select('expected_minutes').eq('user_id', user.id).maybeSingle();
+      if (!settings) {
+        await supabase.from('user_settings').upsert({ user_id: user.id, expected_minutes: DEFAULT_EXPECTED_MINUTES });
+        setExpectedMinutes(DEFAULT_EXPECTED_MINUTES);
+      } else {
+        setExpectedMinutes(normalizeExpectedMinutes(settings.expected_minutes) ?? DEFAULT_EXPECTED_MINUTES);
+      }
+    })();
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
       setPunches([]);
       return;
     }
-
-    const punchesQuery = query(
-      collection(db, `users/${user.uid}/punches`),
-      orderBy('timestamp', 'asc'),
-    );
-
-    const unsub = onSnapshot(
-      punchesQuery,
-      (snapshot) => {
-        const nextPunches: Punch[] = [];
-        snapshot.forEach((snapshotDoc) => {
-          const data = snapshotDoc.data();
-          if (!data.timestamp || typeof data.timestamp.toDate !== 'function') {
-            return;
-          }
-
-          if (data.type !== 'in' && data.type !== 'out') {
-            return;
-          }
-
-          nextPunches.push({
-            id: snapshotDoc.id,
-            timestamp: data.timestamp.toDate(),
-            type: data.type,
-          });
-        });
-        setPunches(nextPunches);
-      },
-      (snapshotError) => {
-        console.error('Error fetching punches', snapshotError);
-        setError(toUserMessage(snapshotError, 'Erro ao carregar histórico de pontos.'));
-      },
-    );
-
-    return unsub;
+    void (async () => {
+      const { data, error: loadError } = await supabase
+        .from('punches')
+        .select('id,timestamp,type')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: true });
+      if (loadError) {
+        setError(toUserMessage(loadError, 'Erro ao carregar historico.'));
+        return;
+      }
+      setPunches((data ?? []).map((row) => ({ id: row.id, timestamp: new Date(row.timestamp), type: row.type })));
+    })();
   }, [user]);
 
-  const signIn = async () => {
+  const signIn = async (email: string, password: string) => {
     setError(null);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (signInError) {
-      setError(toUserMessage(signInError, 'Erro ao autenticar com Google.'));
-    }
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) setError(toUserMessage(authError, 'Erro ao autenticar.'));
   };
-
+  const signUp = async (email: string, password: string) => {
+    setError(null);
+    const { error: authError } = await supabase.auth.signUp({ email, password });
+    if (authError) setError(toUserMessage(authError, 'Erro ao criar conta.'));
+    else setError('Conta criada. Verifique seu email para confirmar.');
+  };
   const logOut = async () => {
     setError(null);
     setPunches([]);
-    try {
-      await signOut(auth);
-    } catch (signOutError) {
-      setError(toUserMessage(signOutError, 'Erro ao sair da conta.'));
-    }
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) setError(toUserMessage(signOutError, 'Erro ao sair.'));
   };
 
-  const addPunch = async (): Promise<boolean> => {
-    if (!user) {
-      return false;
-    }
+  const refreshPunches = async () => {
+    if (!user) return;
+    const { data } = await supabase.from('punches').select('id,timestamp,type').eq('user_id', user.id).order('timestamp');
+    setPunches((data ?? []).map((row) => ({ id: row.id, timestamp: new Date(row.timestamp), type: row.type })));
+  };
 
+  const addPunch = async (timestampOverride?: Date): Promise<boolean> => {
+    if (!user) return false;
     setError(null);
-
-    if (isSavingPunch) {
-      setError('Registro em andamento. Aguarde alguns segundos.');
+    if (isSavingPunch) return false;
+    const now = timestampOverride ?? new Date();
+    const todayPunches = sortPunches(punches.filter((p) => toDateKey(p.timestamp) === toDateKey(now)));
+    if (todayPunches.length > 0 && Date.now() - todayPunches[todayPunches.length - 1].timestamp.getTime() < 15000) {
+      setError('Aguarde alguns segundos antes de registrar novamente.');
       return false;
     }
-
-    const now = new Date();
-    const todayKey = toDateKey(now);
-    const todayPunches = sortPunches(punches.filter((punch) => toDateKey(punch.timestamp) === todayKey));
-
-    if (todayPunches.length > 0) {
-      const lastPunch = todayPunches[todayPunches.length - 1];
-      if (Date.now() - lastPunch.timestamp.getTime() < 15000) {
-        setError('Aguarde alguns segundos antes de registrar novamente.');
-        return false;
-      }
-    }
-
     if (!isOnline) {
-      const queued = readPendingQueue(user.uid) + 1;
-      writePendingQueue(user.uid, queued);
+      const queued = readPendingQueue(user.id) + 1;
+      writePendingQueue(user.id, queued);
       setPendingPunchCount(queued);
-      setError(`Sem internet. Registramos ${queued} ponto(s) na fila local para sincronizar quando a conexão voltar.`);
+      setError(`Sem internet. ${queued} ponto(s) aguardando sincronizacao.`);
       return true;
     }
-
-    try {
-      setIsSavingPunch(true);
-      const type: 'in' | 'out' = todayPunches.length % 2 === 0 ? 'in' : 'out';
-      await addDoc(collection(db, `users/${user.uid}/punches`), {
-        userId: user.uid,
-        timestamp: serverTimestamp(),
-        type,
-      });
-      return true;
-    } catch (addError) {
-      console.error('Failed to add punch', addError);
+    setIsSavingPunch(true);
+    const type: 'in' | 'out' = todayPunches.length % 2 === 0 ? 'in' : 'out';
+    const { error: addError } = await supabase.from('punches').insert({ user_id: user.id, timestamp: now.toISOString(), type });
+    setIsSavingPunch(false);
+    if (addError) {
       setError(toUserMessage(addError, 'Erro ao registrar ponto.'));
       return false;
-    } finally {
-      setIsSavingPunch(false);
     }
+    await refreshPunches();
+    return true;
   };
 
   useEffect(() => {
-    const flushPendingPunches = async () => {
+    void (async () => {
       if (!user || !isOnline || isSavingPunch) return;
-
-      const queued = readPendingQueue(user.uid);
+      const queued = readPendingQueue(user.id);
       if (queued <= 0) return;
-
       setIsSavingPunch(true);
       try {
         for (let i = 0; i < queued; i += 1) {
-          const todayKey = toDateKey(new Date());
-          const todayCount = punches.filter((punch) => toDateKey(punch.timestamp) === todayKey).length + i;
+          const todayCount = punches.filter((p) => toDateKey(p.timestamp) === toDateKey(new Date())).length + i;
           const type: 'in' | 'out' = todayCount % 2 === 0 ? 'in' : 'out';
-          await addDoc(collection(db, `users/${user.uid}/punches`), {
-            userId: user.uid,
-            timestamp: serverTimestamp(),
-            type,
-          });
+          const now = new Date();
+          const { error: addError } = await supabase.from('punches').insert({ user_id: user.id, timestamp: now.toISOString(), type });
+          if (addError) throw addError;
         }
-        writePendingQueue(user.uid, 0);
+        writePendingQueue(user.id, 0);
         setPendingPunchCount(0);
-        setError(`${queued} ponto(s) da fila local foram sincronizados com sucesso.`);
+        setError(`${queued} ponto(s) sincronizados.`);
+        await refreshPunches();
       } catch (syncError) {
-        console.error('Failed to sync queued punches', syncError);
-        setError(toUserMessage(syncError, 'Falha ao sincronizar pontos em fila.'));
+        setError(toUserMessage(syncError, 'Falha ao sincronizar fila.'));
       } finally {
         setIsSavingPunch(false);
       }
-    };
-
-    void flushPendingPunches();
+    })();
   }, [user, isOnline, punches, isSavingPunch]);
 
   const updatePunch = async (id: string, newTimestamp: Date): Promise<boolean> => {
-    if (!user) {
-      return false;
-    }
-
-    if (!isOnline) {
-      setError('Sem internet no momento. Conecte-se antes de editar o ponto.');
-      return false;
-    }
-
+    if (!user || !isOnline) return false;
     const validationMessage = validateEditedPunchTime(punches, id, newTimestamp);
     if (validationMessage) {
       setError(validationMessage);
       return false;
     }
-
-    try {
-      await updateDoc(doc(db, `users/${user.uid}/punches`, id), {
-        timestamp: newTimestamp,
-      });
-      return true;
-    } catch (updateError) {
-      console.error('Failed to update punch', updateError);
+    const { error: updateError } = await supabase.from('punches').update({ timestamp: newTimestamp.toISOString() }).eq('id', id).eq('user_id', user.id);
+    if (updateError) {
       setError(toUserMessage(updateError, 'Erro ao atualizar ponto.'));
       return false;
     }
+    await refreshPunches();
+    return true;
   };
 
   const deletePunch = async (id: string): Promise<boolean> => {
-    if (!user) {
-      return false;
-    }
-
-    if (!isOnline) {
-      setError('Sem internet no momento. Conecte-se antes de excluir o ponto.');
-      return false;
-    }
-
-    try {
-      await deleteDoc(doc(db, `users/${user.uid}/punches`, id));
-      return true;
-    } catch (deleteError) {
-      console.error('Failed to delete punch', deleteError);
+    if (!user || !isOnline) return false;
+    const { error: deleteError } = await supabase.from('punches').delete().eq('id', id).eq('user_id', user.id);
+    if (deleteError) {
       setError(toUserMessage(deleteError, 'Erro ao excluir ponto.'));
       return false;
     }
+    await refreshPunches();
+    return true;
   };
 
   const updateExpectedMinutes = async (value: number) => {
     const normalized = normalizeExpectedMinutes(value);
     if (normalized == null) {
-      setError('Jornada diária inválida. Informe entre 1 e 1440 minutos.');
+      setError('Jornada diaria invalida. Informe entre 1 e 1440 minutos.');
       return;
     }
-
     setExpectedMinutes(normalized);
-    if (!user) {
-      return;
-    }
-
-    try {
-      await updateDoc(doc(db, 'userSettings', user.uid), {
-        expectedMinutes: normalized,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (settingsError) {
-      console.error('Failed to update expected minutes', settingsError);
-      setError(toUserMessage(settingsError, 'Erro ao salvar jornada diária.'));
-    }
+    if (!user) return;
+    const { error: settingsError } = await supabase.from('user_settings').upsert({ user_id: user.id, expected_minutes: normalized });
+    if (settingsError) setError(toUserMessage(settingsError, 'Erro ao salvar jornada diaria.'));
   };
 
   return (
-    <AppContext.Provider
-      value={{
-        user,
-        loadingAuth,
-        signIn,
-        logOut,
-        punches,
-        addPunch,
-        updatePunch,
-        deletePunch,
-        isSavingPunch,
-        isOnline,
-        pendingPunchCount,
-        expectedMinutes,
-        updateExpectedMinutes,
-        error,
-      }}
-    >
+    <AppContext.Provider value={{ user, loadingAuth, signIn, signUp, logOut, punches, addPunch, updatePunch, deletePunch, isSavingPunch, isOnline, pendingPunchCount, expectedMinutes, updateExpectedMinutes, error }}>
       {children}
     </AppContext.Provider>
   );
@@ -446,8 +255,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 export const useAppContext = () => {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useAppContext deve ser usado dentro de AppProvider');
-  }
+  if (!context) throw new Error('useAppContext deve ser usado dentro de AppProvider');
   return context;
 };

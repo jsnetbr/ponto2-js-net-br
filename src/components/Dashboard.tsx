@@ -8,6 +8,8 @@ const DEFAULT_PENDING_LUNCH_MINUTES = 60;
 export function Dashboard() {
   const { punches, addPunch, expectedMinutes, isSavingPunch, isOnline, pendingPunchCount } = useAppContext();
   const [now, setNow] = useState(new Date());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTime, setConfirmTime] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -30,7 +32,6 @@ export function Dashboard() {
   const remainingMinutes = Math.max(expectedMinutes - workedMinutes, 0);
   const balanceMinutes = workedMinutes - expectedMinutes;
   const pendingLunchMinutes = isWorking && todayPunches.length === 1 ? DEFAULT_PENDING_LUNCH_MINUTES : 0;
-  const hasMissingExit = todayPunches.length % 2 !== 0;
   const buttonLabel = isSavingPunch ? 'SALVANDO...' : (isWorking ? 'REGISTRAR SAÍDA' : 'BATER PONTO');
 
   let predictedExitStr = '--:--';
@@ -41,14 +42,29 @@ export function Dashboard() {
 
   const getPunchLabel = (index: number) => {
     if (index === 0) return 'Entrada';
-    if (index === 1) return 'Saída Almoço';
-    if (index === 2) return 'Retorno Almoço';
-    if (index === 3) return 'Saída';
-    return index % 2 === 0 ? `Entrada Extra ${Math.floor(index / 2)}` : `Saída Extra ${Math.floor(index / 2)}`;
+    if (index === 1) return 'Ida intervalo';
+    if (index === 2) return 'Volta intervalo';
+    if (index === 3) return 'Saida';
+    return index % 2 === 0 ? `Entrada extra ${Math.floor(index / 2)}` : `Saida extra ${Math.floor(index / 2)}`;
   };
 
   const timeString = now.toLocaleTimeString('pt-BR', { hour12: false });
   const dateString = now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const handleOpenConfirm = () => {
+    if (isSavingPunch) return;
+    setConfirmTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmPunch = async () => {
+    const [hh, mm] = confirmTime.split(':').map(Number);
+    const target = new Date();
+    if (!Number.isNaN(hh) && !Number.isNaN(mm)) {
+      target.setHours(hh, mm, 0, 0);
+    }
+    const saved = await addPunch(target);
+    if (saved) setConfirmOpen(false);
+  };
 
   return (
     <div className="flex-1 w-full max-w-2xl mx-auto px-6 py-12 flex flex-col items-center relative z-10 min-h-[85vh] pt-12 md:pt-32 pb-32">
@@ -66,7 +82,7 @@ export function Dashboard() {
         type="button"
         disabled={isSavingPunch}
         className="relative flex items-center justify-center mb-16 cursor-pointer group disabled:cursor-not-allowed disabled:opacity-70"
-        onClick={addPunch}
+        onClick={handleOpenConfirm}
       >
         {isWorking && <div className="absolute inset-0 rounded-full border border-primary/20 animate-[ping_2.5s_cubic-bezier(0,0,0.2,1)_infinite]"></div>}
         
@@ -90,12 +106,6 @@ export function Dashboard() {
           <span className="text-body-sm font-semibold">
             {pendingPunchCount} ponto(s) aguardando sincronização.
           </span>
-        </div>
-      )}
-
-      {hasMissingExit && (
-        <div className="w-full mb-8 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-on-surface">
-          <span className="text-body-sm font-semibold">Você está com uma entrada aberta hoje.</span>
         </div>
       )}
 
@@ -157,6 +167,39 @@ export function Dashboard() {
           );
         })}
       </div>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-headline-sm font-bold text-on-surface mb-3">Confirmar registro</h3>
+            <label className="text-body-sm text-on-surface-variant block mb-2">Horario a registrar</label>
+            <input
+              type="time"
+              value={confirmTime}
+              onChange={(e) => setConfirmTime(e.target.value)}
+              className="w-full bg-surface-variant border border-outline-variant text-on-surface rounded-lg px-3 py-2 mb-6"
+            />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="flex-1 bg-surface-variant text-on-surface py-3 rounded-xl font-bold"
+              >
+                CANCELAR
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPunch}
+                className="flex-1 bg-primary text-white py-3 rounded-xl font-bold"
+              >
+                CONFIRMAR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
