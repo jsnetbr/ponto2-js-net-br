@@ -31,6 +31,18 @@
 }
 
 @layer utilities {
+  .top-safe {
+    top: max(1rem, env(safe-area-inset-top));
+  }
+
+  .bottom-safe {
+    bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .bottom-nav {
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 4.75rem);
+  }
+
   .text-display-lg {
     font-size: 48px;
     line-height: 1.1;
@@ -112,4 +124,23 @@
     -moz-appearance: textfield;
     appearance: textfield;
   }
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: #0F172A;
+  overscroll-behavior-y: none;
+}
+
+body {
+  margin: 0;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input {
+  font: inherit;
 }

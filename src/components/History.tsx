@@ -1,13 +1,15 @@
 import { Calendar as CalendarIcon, Download, Filter, CheckCircle2, AlertCircle, Trash2, X } from 'lucide-react';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAppContext } from '../AppContext';
+import { usePunchesContext } from '../providers/PunchProvider';
+import { ConfirmDialog } from './ConfirmDialog';
 import { formatMinutes, calculateWorkedMs, sortPunches, toDateKey, toMonthKey, validateEditedPunchTime } from '../utils';
 
 export function History() {
-  const { punches, expectedMinutes, updatePunch, deletePunch } = useAppContext();
+  const { punches, expectedMinutes, updatePunch, deletePunch } = usePunchesContext();
   const [now, setNow] = useState(new Date());
   const [selectedMonth, setSelectedMonth] = useState(toMonthKey(new Date()));
-
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  
   const [editingPunch, setEditingPunch] = useState<{ id: string, dateObj: Date, timeStr: string } | null>(null);
   const [editTime, setEditTime] = useState('');
 
@@ -132,17 +134,18 @@ export function History() {
   const currentMonthLabel = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
   const handleExportCsv = () => {
-    const header = ['Data', 'Entrada 1', 'Saida 1', 'Entrada 2', 'Saida 2', 'Total', 'Saldo', 'Observacao'];
+    const header = ['Data', 'Entradas/Saidas', 'Total', 'Saldo', 'Observacao'];
     const rows = daysData.map((day) => {
-      const values = day.punches.slice(0, 4).map((p) => p.displayStr);
-      while (values.length < 4) values.push('--:--');
-      return [day.dateKey, ...values, day.total, day.balance, day.hasOpenPunch ? 'Entrada sem saida' : ''];
+      const punchesStr = day.realPunches
+        .map(p => `${p.type}: ${p.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`)
+        .join(' | ');
+      return [day.dateKey, punchesStr, day.total, day.balance, day.hasOpenPunch ? 'Incompleto' : ''];
     });
-
+    
     const csv = [header, ...rows]
       .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(';'))
       .join('\n');
-
+    
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -173,20 +176,27 @@ export function History() {
     }
   };
 
+  const handleRequestDelete = () => {
+    setIsDeleteConfirmOpen(true);
+  };
+
   const handleDelete = async () => {
     if (!editingPunch) return;
-
+    
     const dayKey = toDateKey(editingPunch.dateObj);
     const dayPunches = sortPunches(punches.filter((p) => toDateKey(p.timestamp) === dayKey));
     const nextCount = dayPunches.filter((p) => p.id !== editingPunch.id).length;
-
-    if (nextCount > 0 && nextCount % 2 !== 0) return;
-
-    if (window.confirm('Certeza que deseja excluir este ponto? Essa acao nao pode ser desfeita.')) {
-      const deleted = await deletePunch(editingPunch.id);
-      if (deleted) {
-        setEditingPunch(null);
-      }
+    
+    if (nextCount > 0 && nextCount % 2 !== 0) {
+      alert('Nao e possivel excluir este ponto pois deixaria a jornada incompleta (entrada sem saida).');
+      setIsDeleteConfirmOpen(false);
+      return;
+    }
+    
+    const deleted = await deletePunch(editingPunch.id);
+    if (deleted) {
+      setEditingPunch(null);
+      setIsDeleteConfirmOpen(false);
     }
   };
 
@@ -205,10 +215,13 @@ export function History() {
         </div>
       )}
 
-      <div className="glass-panel rounded-xl p-6 mb-8 max-w-sm">
-        <h3 className="text-body-sm font-bold text-on-surface-variant mb-2">BANCO DE HORAS</h3>
-        <span className={`text-display-lg font-bold ${balanceMins >= 0 ? 'text-primary' : 'text-error'}`}>{balanceFmt}</span>
-      </div>
+       <div className="glass-panel rounded-xl p-6 mb-8 max-w-sm border-l-4 border-primary">
+         <h3 className="text-body-sm font-bold text-on-surface-variant mb-2">SALDO DO MÊS</h3>
+         <div className="flex items-baseline gap-2">
+           <span className={`text-display-lg font-bold ${balanceMins >= 0 ? 'text-primary' : 'text-error'}`}>{balanceFmt}</span>
+           <span className="text-body-sm text-on-surface-variant">acumulados</span>
+         </div>
+       </div>
 
       <div className="glass-panel rounded-xl p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 shadow-sm">
         <div className="flex items-center gap-3 px-3">
@@ -254,13 +267,13 @@ export function History() {
                 {day.punches.map((p, j) => {
                   const isEntrance = j % 2 === 0;
                   const index = Math.floor(j / 2) + 1;
-                  const label = (() => {
-                    if (j === 0) return 'Entrada';
-                    if (j === 1) return 'Ida intervalo';
-                    if (j === 2) return 'Volta intervalo';
-                    if (j === 3) return 'Saida';
-                    return isEntrance ? `Entrada ${index}` : `Saida ${index}`;
-                  })();
+                       const label = (() => {
+                         if (p.type === 'in') return 'Entrada';
+                         if (p.type === 'lunch_start') return 'Ida intervalo';
+                         if (p.type === 'lunch_end') return 'Volta intervalo';
+                         if (p.type === 'out') return 'Saida';
+                         return 'Registro';
+                       })();
 
                   return (
                     <div key={j} className="rounded-md border border-outline-variant/50 bg-surface p-1">
@@ -275,10 +288,21 @@ export function History() {
             </div>
           ))}
         </div>
-      )}
+       )}
+     </div>
+     
+     <ConfirmDialog 
+       isOpen={isDeleteConfirmOpen} 
+       onClose={() => setIsDeleteConfirmOpen(false)} 
+       onConfirm={handleDelete} 
+       title="Excluir Registro" 
+       message="Tem certeza que deseja excluir este ponto? Essa acao nao pode ser desfeita." 
+       confirmText="Excluir" 
+       variant="danger" 
+     />
 
-      {editingPunch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+     {editingPunch && (
+       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="glass-panel w-full max-w-sm rounded-2xl p-6 relative shadow-2xl animate-in zoom-in-95 duration-200">
             <button onClick={() => setEditingPunch(null)} className="absolute top-4 right-4 text-outline hover:text-on-surface transition-colors">
               <X size={20} />
@@ -289,9 +313,9 @@ export function History() {
             <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} className="w-full bg-surface-variant/50 border border-outline-variant text-on-surface text-headline-md font-semibold rounded-xl h-16 px-4 mb-8 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-center file:hidden" />
 
             <div className="flex justify-between items-center gap-3">
-              <button onClick={handleDelete} className="flex items-center justify-center gap-2 px-4 py-3 bg-error-container text-error rounded-xl hover:bg-error/20 transition-colors font-semibold">
-                <Trash2 size={20} />
-              </button>
+               <button onClick={handleRequestDelete} className="flex items-center justify-center gap-2 px-4 py-3 bg-error-container text-error rounded-xl hover:bg-error/20 transition-colors font-semibold">
+                 <Trash2 size={20} />
+               </button>
               <button onClick={handleSaveEdit} disabled={Boolean(editValidationMessage)} className="flex-1 bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary/90 transition-colors">
                 SALVAR
               </button>

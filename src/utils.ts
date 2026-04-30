@@ -1,6 +1,7 @@
 export interface SimplePunch {
   id?: string;
   timestamp: Date;
+  pending?: boolean;
 }
 
 export function toDateKey(date: Date): string {

@@ -1,18 +1,24 @@
 import { Clock, LogOut, User, Shield } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { useAppContext } from '../AppContext';
+import { useAuth } from '../providers/AuthProvider';
+import { usePunchesContext } from '../providers/PunchProvider';
+import { useToast } from '../ToastContext';
+import { useUserSettings } from '../hooks/useSupabase';
 import { supabase } from '../utils/supabase';
 
 export function Settings() {
-  const { expectedMinutes, updateExpectedMinutes, logOut, user } = useAppContext();
+  const { logOut, user } = useAuth();
+  const { expectedMinutes, updateExpectedMinutes, updateLunchMinutes } = usePunchesContext();
+  const { toast } = useToast();
+  const { data: settings } = useUserSettings(user?.id ?? '');
   const [localHours, setLocalHours] = useState(Math.floor(expectedMinutes / 60));
   const [localMins, setLocalMins] = useState(expectedMinutes % 60);
+  const [lunchMins, setLunchMins] = useState(settings?.lunch_minutes ?? 60);
 
   const [displayName, setDisplayName] = useState('');
   const [emailInput, setEmailInput] = useState(user?.email ?? '');
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -35,69 +41,62 @@ export function Settings() {
 
   const handleSaveDisplayName = async () => {
     if (!user) return;
-    setFeedback(null);
     setSaving(true);
     const trimmed = displayName.trim();
     const { error } = await supabase.from('profiles').upsert({ id: user.id, email: user.email ?? '', display_name: trimmed || null });
     setSaving(false);
     if (error) {
-      setFeedback(`Erro ao salvar nome: ${error.message}`);
+      toast(`Erro ao salvar nome: ${error.message}`, 'error');
       return;
     }
-    setFeedback('Nome atualizado com sucesso.');
+    toast('Nome atualizado com sucesso.', 'success');
   };
 
   const handleUpdateEmail = async () => {
-    setFeedback(null);
     if (!emailInput || !emailInput.includes('@')) {
-      setFeedback('Informe um email valido.');
+      toast('Informe um email valido.', 'error');
       return;
     }
     setSaving(true);
     const { error } = await supabase.auth.updateUser({ email: emailInput.trim() });
     setSaving(false);
     if (error) {
-      setFeedback(`Erro ao solicitar troca de email: ${error.message}`);
+      toast(`Erro ao solicitar troca de email: ${error.message}`, 'error');
       return;
     }
-    setFeedback('Solicitacao enviada. Confirme no email para concluir a troca.');
+    toast('Solicitacao enviada. Confirme no email para concluir a troca.', 'success');
   };
 
   const handleUpdatePassword = async () => {
-    setFeedback(null);
     if (passwordInput.length < 6) {
-      setFeedback('A senha precisa ter pelo menos 6 caracteres.');
+      toast('A senha precisa ter pelo menos 6 caracteres.', 'error');
       return;
     }
     if (passwordInput !== passwordConfirm) {
-      setFeedback('As senhas nao conferem.');
+      toast('As senhas nao conferem.', 'error');
       return;
     }
-
+    
     setSaving(true);
     const { error } = await supabase.auth.updateUser({ password: passwordInput });
     setSaving(false);
     if (error) {
-      setFeedback(`Erro ao alterar senha: ${error.message}`);
+      toast(`Erro ao alterar senha: ${error.message}`, 'error');
       return;
     }
     setPasswordInput('');
     setPasswordConfirm('');
-    setFeedback('Senha atualizada com sucesso.');
+    toast('Senha atualizada com sucesso.', 'success');
   };
 
   return (
     <div className="pt-12 md:pt-32 pb-32 px-6 max-w-3xl mx-auto flex flex-col gap-6 relative z-10 w-full mb-32">
-      <div className="mb-2">
-        <h2 className="text-display-lg text-on-surface">Ajustes</h2>
-        <p className="text-body-md text-on-surface-variant mt-2">Perfil, seguranca e aparencia.</p>
-      </div>
-
-      {feedback && (
-        <div className="glass-panel rounded-xl p-3 text-body-sm text-on-surface-variant">{feedback}</div>
-      )}
-
-      <section className="glass-panel rounded-xl overflow-hidden flex flex-col">
+       <div className="mb-2">
+         <h2 className="text-display-lg text-on-surface">Ajustes</h2>
+         <p className="text-body-md text-on-surface-variant mt-2">Perfil, seguranca e aparencia.</p>
+       </div>
+       
+       <section className="glass-panel rounded-xl overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-outline-variant bg-surface-variant/30">
           <h3 className="text-headline-md text-on-surface flex items-center gap-2">
             <User className="text-primary w-6 h-6" />
@@ -170,19 +169,33 @@ export function Settings() {
               <label className="text-label-sm text-on-surface block mb-1">JORNADA DIARIA PREVISTA</label>
               <span className="text-body-md text-on-surface-variant text-sm">Defina quanto tempo voce deve trabalhar por dia.</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative w-24">
-                <input type="number" min="0" max="24" value={localHours} onChange={(e) => setLocalHours(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-6 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">h</span>
-              </div>
-              <span className="text-surface-variant-on font-bold">:</span>
-              <div className="relative w-24">
-                <input type="number" min="0" max="59" value={localMins.toString().padStart(2, '0')} onChange={(e) => setLocalMins(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-7 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">m</span>
-              </div>
-            </div>
-          </div>
-        </div>
+           <div className="flex items-center gap-2">
+             <div className="relative w-24">
+               <input type="number" min="0" max="24" value={localHours} onChange={(e) => setLocalHours(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-6 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
+               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">h</span>
+             </div>
+             <span className="text-surface-variant-on font-bold">:</span>
+             <div className="relative w-24">
+               <input type="number" min="0" max="59" value={localMins.toString().padStart(2, '0')} onChange={(e) => setLocalMins(parseInt(e.target.value, 10) || 0)} onBlur={handleSaveWorkday} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-7 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
+               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">m</span>
+             </div>
+           </div>
+         </div>
+       </div>
+       <div className="flex flex-col gap-4 mt-4">
+         <div className="flex items-center justify-between gap-4">
+           <div>
+             <label className="text-label-sm text-on-surface block mb-1">INTERVALO DE ALMOÇO</label>
+             <span className="text-body-sm text-on-surface-variant">Tempo previsto para pausa.</span>
+           </div>
+           <div className="relative w-32">
+             <input type="number" min="0" max="1440" value={lunchMins} onChange={(e) => setLunchMins(parseInt(e.target.value, 10) || 0)} onBlur={() => updateLunchMinutes(lunchMins)} className="w-full bg-surface-variant border border-outline-variant rounded-lg px-3 py-2 pr-8 text-body-md font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-center" />
+             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-sm">min</span>
+           </div>
+         </div>
+       </div>
+     </div>
+   </section>
       </section>
 
       <section className="glass-panel rounded-xl overflow-hidden flex flex-col p-4">

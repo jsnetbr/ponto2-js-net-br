@@ -38,7 +38,7 @@ export function Navigation({ activeTab, setActiveTab }: NavigationProps) {
         </nav>
       </header>
 
-      <nav className="md:hidden fixed bottom-6 left-4 right-4 flex justify-around items-center h-16 px-2 bg-surface-variant backdrop-blur-md rounded-2xl z-50 shadow-2xl border border-outline">
+      <nav className="md:hidden fixed bottom-safe left-4 right-4 flex justify-around items-center h-16 px-2 bg-surface-variant/95 backdrop-blur-md rounded-2xl z-50 shadow-2xl border border-outline">
         {tabs.map((tab) => (
           <button
             key={tab.id}
