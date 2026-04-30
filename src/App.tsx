@@ -7,6 +7,7 @@ import { ToastProvider } from './ToastContext';
 import { AuthProvider, useAuth } from './providers/AuthProvider';
 import { PunchProvider } from './providers/PunchProvider';
 import { SyncProvider, useSync } from './providers/SyncProvider';
+import { isSupabaseConfigured } from './utils/supabase';
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })));
 const History = lazy(() => import('./components/History').then((module) => ({ default: module.History })));
@@ -110,7 +111,35 @@ function AppContent() {
   );
 }
 
+function MissingConfigScreen() {
+  return (
+    <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center bg-surface px-6 py-10 text-center">
+      <div className="mb-8">
+        <AppIcon size={88} />
+      </div>
+      <h1 className="text-display-lg text-on-surface mb-4">pontojs.</h1>
+      <div className="w-full max-w-md flex flex-col gap-4 rounded-2xl border border-error/30 bg-error-container/30 p-6 text-left">
+        <h2 className="text-headline-md font-bold text-error">Configuração incompleta</h2>
+        <p className="text-body-md text-on-surface">
+          O aplicativo precisa das variáveis de ambiente do Supabase para funcionar.
+        </p>
+        <div className="flex flex-col gap-2 text-body-sm text-on-surface-variant">
+          <code className="rounded-lg bg-surface-variant px-3 py-2 font-mono text-on-surface">VITE_SUPABASE_URL</code>
+          <code className="rounded-lg bg-surface-variant px-3 py-2 font-mono text-on-surface">VITE_SUPABASE_PUBLISHABLE_KEY</code>
+        </div>
+        <p className="text-body-sm text-on-surface-variant pt-2">
+          No Cloudflare Pages, vá em <strong>Settings {'>'} Environment variables</strong> e adicione essas variáveis. Depois, faça um novo deploy.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  if (!isSupabaseConfigured()) {
+    return <MissingConfigScreen />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>

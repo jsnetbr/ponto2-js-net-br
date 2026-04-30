@@ -4,7 +4,7 @@ import { useToast } from '../ToastContext';
 import { useUserSettings } from '../hooks/useSupabase';
 import { useAuth } from '../providers/AuthProvider';
 import { usePunchesContext } from '../providers/PunchProvider';
-import { supabase } from '../utils/supabase';
+import { getSupabase } from '../utils/supabase';
 
 export function Settings() {
   const { logOut, user } = useAuth();
@@ -34,7 +34,7 @@ export function Settings() {
     if (!user) return;
     setEmailInput(user.email ?? '');
     void (async () => {
-      const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle();
+      const { data } = await getSupabase().from('profiles').select('display_name').eq('id', user.id).maybeSingle();
       setDisplayName(data?.display_name ?? '');
     })();
   }, [user]);
@@ -51,7 +51,7 @@ export function Settings() {
     if (!user) return;
     setSaving(true);
     const trimmed = displayName.trim();
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('profiles')
       .update({ display_name: trimmed || null })
       .eq('id', user.id);
@@ -69,7 +69,7 @@ export function Settings() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase.auth.updateUser({ email: emailInput.trim() });
+    const { error } = await getSupabase().auth.updateUser({ email: emailInput.trim() });
     setSaving(false);
     if (error) {
       toast(`Erro ao solicitar troca de email: ${error.message}`, 'error');
@@ -89,7 +89,7 @@ export function Settings() {
     }
 
     setSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: passwordInput });
+    const { error } = await getSupabase().auth.updateUser({ password: passwordInput });
     setSaving(false);
     if (error) {
       toast(`Erro ao alterar senha: ${error.message}`, 'error');

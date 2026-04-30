@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../utils/supabase';
+import { getSupabase } from '../utils/supabase';
 import { useAuth } from './AuthProvider';
 import { useToast } from '../ToastContext';
 import type { PendingPunch } from '../types';
@@ -83,7 +83,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           type: item.type,
         }));
 
-        const { error } = await supabase
+        const { error } = await getSupabase()
           .from('punches')
           .upsert(payload, { onConflict: 'user_id,timestamp,type', ignoreDuplicates: true });
         

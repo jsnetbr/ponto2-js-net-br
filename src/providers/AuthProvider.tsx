@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { supabase } from '../utils/supabase';
+import { getSupabase } from '../utils/supabase';
 import { useToast } from '../ToastContext';
 
 interface AuthContextType {
@@ -27,11 +27,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await getSupabase().auth.getSession();
       setUser(data.session?.user ?? null);
       setLoadingAuth(false);
     })();
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = getSupabase().auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoadingAuth(false);
     });
@@ -39,18 +39,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: authError } = await getSupabase().auth.signInWithPassword({ email, password });
     if (authError) toast(toUserMessage(authError, 'Erro ao autenticar.'), 'error');
   };
   
   const signUp = async (email: string, password: string) => {
-    const { error: authError } = await supabase.auth.signUp({ email, password });
+    const { error: authError } = await getSupabase().auth.signUp({ email, password });
     if (authError) toast(toUserMessage(authError, 'Erro ao criar conta.'), 'error');
     else toast('Conta criada. Verifique seu email para confirmar.', 'success');
   };
   
   const logOut = async () => {
-    const { error: signOutError } = await supabase.auth.signOut();
+    const { error: signOutError } = await getSupabase().auth.signOut();
     if (signOutError) toast(toUserMessage(signOutError, 'Erro ao sair.'), 'error');
   };
 
