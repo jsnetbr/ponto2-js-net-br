@@ -288,18 +288,18 @@ export function History() {
             </div>
           ))}
         </div>
-       )}
-     </div>
-     
-     <ConfirmDialog 
-       isOpen={isDeleteConfirmOpen} 
-       onClose={() => setIsDeleteConfirmOpen(false)} 
-       onConfirm={handleDelete} 
-       title="Excluir Registro" 
-       message="Tem certeza que deseja excluir este ponto? Essa acao nao pode ser desfeita." 
-       confirmText="Excluir" 
-       variant="danger" 
-     />
+        )}
+      </div>
+
+      <ConfirmDialog 
+        isOpen={isDeleteConfirmOpen} 
+        onClose={() => setIsDeleteConfirmOpen(false)} 
+        onConfirm={handleDelete} 
+        title="Excluir Registro" 
+        message="Tem certeza que deseja excluir este ponto? Essa acao nao pode ser desfeita." 
+        confirmText="Excluir" 
+        variant="danger" 
+      />
 
      {editingPunch && (
        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
